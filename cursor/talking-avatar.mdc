@@ -1,0 +1,47 @@
+---
+description: Route a talking-avatar job to the right backend (free local SadTalker, rented-GPU SadTalker, Hedra API, HeyGen API) and preflight the portrait + audio before any render. Apply when the agent turns a portrait and a script or voice track into a talking-head video, when choosing between avatar backends, or when wiring German/Persian TTS for the voice track.
+globs: "**/*.{png,jpg,jpeg,webp,wav,mp3,m4a}"
+alwaysApply: false
+---
+
+# Talking-avatar router — route first, render second
+
+## The contract
+
+1. **Preflight first, with the tool — never send a bad asset to a
+   render.** Zero-dependency, Python stdlib only:
+
+   ```bash
+   python3 scripts/avatar_route.py --image face.png --audio voice.wav \
+       --budget free --quality good --vram-gb 2 --gpu-vendor nvidia --lang de
+   ```
+
+   Exit codes: `0` = route decided · `1` = preflight errors, no route
+   (fix the asset, do not render) · `2` = usage error. See SKILL.md
+   for the full contract, `references/backends.md` for the backend
+   matrix, `references/tts.md` for voice wiring, `references/pitfalls.md`
+   for the 20 known failures.
+
+## Decision table
+
+| Situation | Route |
+|---|---|
+| budget=free, NVIDIA ≥4GB VRAM | `sadtalker-local` (512px) |
+| budget=free, NVIDIA 2GB (e.g. GeForce 930MX class) | `sadtalker-local` 256px, very slow — price cloud GPU as the alternative |
+| budget=free, no/weak GPU | no free route — say so, offer `sadtalker-cloud-gpu` (cents-per-clip class) |
+| quality=studio, budget allows | `heygen-api`, then `hedra-api` |
+| stylized/cartoon/non-human face | API route only — SadTalker needs photographic human faces |
+| quick draft | cheapest feasible route, 256px |
+
+## Voice rule
+
+German script → German TTS voice (Piper `thorsten` local, or Edge-TTS
+de-DE). Persian script → Persian voice. Never cross voices across
+languages. Synthesize to WAV, then re-run preflight on the WAV.
+
+## Limits — say them
+
+The tool routes and preflights; it does not render and does not call
+APIs. Cost tiers are indicative (Oct 2026) — re-verify the live
+pricing page before spending. Never report "rendered" from a
+preflight: exit 0 means "route decided", not "video exists".
